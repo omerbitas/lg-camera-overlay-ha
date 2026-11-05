@@ -1,0 +1,27 @@
+diff --git a/relay/relay.cjs b/relay/relay.cjs
+index 3296782..421ba60 100644
+--- a/relay/relay.cjs
++++ b/relay/relay.cjs
+@@ -52,10 +52,11 @@ function detach(ws){
+  if(!clients.delete(ws))return;
+  const group=ws.group;ws.group=null;if(group){group.clients.delete(ws);if(!group.clients.size)stopStream(group);}
+ }
+-function encode(group,software){
++function encode(group,software,safe){
+  if(stopping||streams.get(group.camera)!==group||!group.clients.size)return;
+  const args=["-hide_banner","-loglevel","error"];
+  if(!software&&conf.hardwareDecode==="videotoolbox")args.push("-hwaccel","videotoolbox");
++ if(!safe)args.push("-analyzeduration","200000","-probesize","500000");
+  args.push("-rtsp_transport","tcp","-i",conf.sources[group.camera],"-an","-vf","scale=768:432","-r","25","-c:v","mpeg1video","-b:v","2200k","-maxrate","2600k","-bufsize","5200k","-bf","0","-g","12","-threads","2","-t","95","-f","mpegts","-muxdelay","0.001","pipe:1");
+  const child=spawn(conf.ffmpeg,args,{cwd:root,stdio:["ignore","pipe","pipe"]});group.encoder=child;
+  child.stdout.on("data",data=>{
+@@ -70,7 +71,8 @@ function encode(group,software){
+  child.on("error",()=>{if(group.encoder!==child)return;group.error="Encoder could not start";for(const ws of [...group.clients]){detach(ws);ws.close(1011,"Encoder unavailable");}stopStream(group);});
+  child.on("exit",code=>{
+   if(group.encoder!==child)return;group.encoder=null;
+-  if(code!==0&&!software&&!group.bytes&&group.clients.size){log("software_decode_fallback",{camera:group.camera});encode(group,true);return;}
++  if(code!==0&&!safe&&!group.bytes&&group.clients.size){group.error=null;log("safe_start_fallback",{camera:group.camera});encode(group,software,true);return;}
++  if(code!==0&&!software&&!group.bytes&&group.clients.size){log("software_decode_fallback",{camera:group.camera});encode(group,true,safe);return;}
+   for(const ws of [...group.clients]){detach(ws);ws.close(1011,"Encoder ended");}
+   stopStream(group);log("encoder_ended",{camera:group.camera,code,bytes:group.bytes});
+  });

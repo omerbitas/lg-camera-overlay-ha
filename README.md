@@ -7,3 +7,7 @@ The upstream project marks its Home Assistant OS app as experimental and not tes
 ## Local change
 
 `lg_camera_overlay/remember-stream.patch` modifies upstream `source/app.js` so a launch without parameters, such as from the remote's Quick Access, reopens the last Home Assistant launch. The saved address stays in the app's storage on the TV.
+
+`zoom.patch` adds digital zoom to the TV panel: remote wheel or red/green buttons, with arrow keys to pan while zoomed.
+
+`faster-start.patch` shortens FFmpeg's stream analysis in the relay, and retries with default settings if that fails.
