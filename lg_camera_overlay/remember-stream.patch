@@ -1,0 +1,29 @@
+diff --git a/source/app.js b/source/app.js
+index 2372025..dff09ea 100644
+--- a/source/app.js
++++ b/source/app.js
+@@ -21,6 +21,15 @@
+   if(typeof p==="string"){try{p=JSON.parse(p);}catch(e){p={};}}
+   return p&&typeof p==="object"?p:{};
+  }
++ /* Remember the last Home Assistant launch so a launch without parameters (remote Quick Access) can reopen it. */
++ function remember(p){
++  var key="overlayLastLaunch",saved=null,copy={},k;
++  try{
++   if(p.stream){for(k in p)if(k!=="sentAt"&&k!=="detectedAt")copy[k]=p[k];window.localStorage.setItem(key,JSON.stringify(copy));return p;}
++   saved=JSON.parse(window.localStorage.getItem(key)||"null");
++  }catch(e){}
++  return saved&&typeof saved==="object"&&saved.stream?saved:p;
++ }
+  function bounded(value,low,high,fallback){value=Number(value);return isFinite(value)&&value>0?Math.max(low,Math.min(high,value)):fallback;}
+  function style(p){
+   var place=Object.prototype.hasOwnProperty.call(places,p.position)?places[p.position]:places["top-right"],compact=p.compact===true||p.compact==="true",border=!(p.border===false||p.border==="false");
+@@ -34,7 +43,7 @@
+  }
+  function show(event){
+   stop();
+-  var p=params(event),url=p.stream||"",duration=bounded(p.duration,15,90,45),mine=generation;
++  var p=remember(params(event)),url=p.stream||"",duration=bounded(p.duration,15,90,45),mine=generation;
+   style(p);panel.style.display="block";panel.style.width=bounded(p.width,25,55,42)+"%";
+   label.textContent=typeof p.label==="string"?p.label.slice(0,60):"Camera";
+   seconds.textContent=String(Math.ceil(duration));status.textContent="Connecting...";
