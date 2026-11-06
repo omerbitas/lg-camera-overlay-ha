@@ -1,0 +1,236 @@
+diff --git a/relay/relay.cjs b/relay/relay.cjs
+index 421ba60..07f0559 100644
+--- a/relay/relay.cjs
++++ b/relay/relay.cjs
+@@ -57,7 +57,7 @@ function encode(group,software,safe){
+  const args=["-hide_banner","-loglevel","error"];
+  if(!software&&conf.hardwareDecode==="videotoolbox")args.push("-hwaccel","videotoolbox");
+  if(!safe)args.push("-analyzeduration","200000","-probesize","500000");
+- args.push("-rtsp_transport","tcp","-i",conf.sources[group.camera],"-an","-vf","scale=768:432","-r","25","-c:v","mpeg1video","-b:v","2200k","-maxrate","2600k","-bufsize","5200k","-bf","0","-g","12","-threads","2","-t","95","-f","mpegts","-muxdelay","0.001","pipe:1");
++ args.push("-rtsp_transport","tcp","-i",conf.sources[group.camera],"-an","-vf","scale=768:432","-r","25","-c:v","mpeg1video","-b:v","2200k","-maxrate","2600k","-bufsize","5200k","-bf","0","-g","12","-threads","2","-t","660","-f","mpegts","-muxdelay","0.001","pipe:1");
+  const child=spawn(conf.ffmpeg,args,{cwd:root,stdio:["ignore","pipe","pipe"]});group.encoder=child;
+  child.stdout.on("data",data=>{
+   if(group.encoder!==child)return;
+diff --git a/source/app.js b/source/app.js
+index ced5f60..9ac69d3 100644
+--- a/source/app.js
++++ b/source/app.js
+@@ -2,27 +2,41 @@
+ (function () {
+  "use strict";
+  var panel=document.getElementById("panel"),canvas=document.getElementById("camera"),message=document.getElementById("message");
+- var status=document.getElementById("status"),seconds=document.getElementById("seconds"),label=document.getElementById("label");
+- var zoom=1,originX=50,originY=50,player=null,closeTimer=null,tickTimer=null,generation=0,lastFrame=0,frames=0,lastCount=0,started=0,showFps=true;
++ var status=document.getElementById("status"),seconds=document.getElementById("seconds"),label=document.getElementById("label"),thumb=document.getElementById("thumb"),badge=document.getElementById("badge");
++ var zoom=1,originX=50,originY=50,player=null,closeTimer=null,tickTimer=null,generation=0,lastFrame=0,frames=0,lastCount=0,started=0,showFps=true,stage=null,current={},deadline=0,hideTimer=null,baseClass="",slideClass="from-right",margin=3,place=null;
+  /* top, right, bottom, left, transform; "m" is the edge margin */
+  var places={"top-right":["m","m","auto","auto","none"],"top-left":["m","auto","auto","m","none"],"bottom-right":["auto","m","m","auto","none"],"bottom-left":["auto","auto","m","m","none"],"center":["50%","auto","auto","50%","translate(-50%,-50%)"]};
+  function applyZoom(){canvas.style.transformOrigin=originX+"% "+originY+"%";canvas.style.transform=zoom>1?"scale("+zoom+")":"none";}
+  function setZoom(value){zoom=Math.max(1,Math.min(3,value));if(zoom<1.05)zoom=1;if(zoom===1){originX=50;originY=50;}applyZoom();}
+  function pan(dx,dy){if(zoom===1)return;originX=Math.max(0,Math.min(100,originX+dx));originY=Math.max(0,Math.min(100,originY+dy));applyZoom();}
+  function wheel(e){
+-  if(panel.style.display==="none")return;
++  if(stage===null||stage==="chip")return;
+   if(e.preventDefault)e.preventDefault();
+   if(zoom===1&&e.deltaY<0&&isFinite(e.clientX)){var box=canvas.parentNode.getBoundingClientRect();if(box.width&&box.height&&e.clientX>=box.left&&e.clientX<=box.right&&e.clientY>=box.top&&e.clientY<=box.bottom){originX=(e.clientX-box.left)/box.width*100;originY=(e.clientY-box.top)/box.height*100;}}
+   setZoom(e.deltaY<0?zoom*1.25:zoom/1.25);
+  }
+- function stop(){
+-  generation++;
++ function clearTimers(){
+   if(closeTimer!==null){clearTimeout(closeTimer);closeTimer=null;}
+   if(tickTimer!==null){clearInterval(tickTimer);tickTimer=null;}
++ }
++ function stopPlayer(){
++  generation++;
++  if(tickTimer!==null){clearInterval(tickTimer);tickTimer=null;}
+   if(player){player.destroy();player=null;}
+   canvas.style.visibility="hidden";
+  }
+- function dismiss(){stop();panel.style.display="none";try{window.close();}catch(e){}}
++ function stop(){clearTimers();stopPlayer();}
++ function dismiss(){
++  stop();stage=null;
++  panel.className=baseClass+" "+slideClass+" hiding";
++  hideTimer=setTimeout(function(){hideTimer=null;panel.style.display="none";try{window.close();}catch(e){}},260);
++ }
++ function setTimer(sec){
++  if(closeTimer!==null)clearTimeout(closeTimer);
++  deadline=Date.now()+sec*1000;
++  seconds.textContent=String(Math.ceil(sec));
++  closeTimer=setTimeout(dismiss,sec*1000);
++ }
+  function params(event){
+   var p=event&&event.detail;
+   if(p&&p.launchParams)p=p.launchParams;
+@@ -34,51 +48,112 @@
+  function remember(p){
+   var key="overlayLastLaunch",saved=null,copy={},k;
+   try{
+-   if(p.stream){for(k in p)if(k!=="sentAt"&&k!=="detectedAt")copy[k]=p[k];window.localStorage.setItem(key,JSON.stringify(copy));return p;}
++   if(p.stream){for(k in p)if(k!=="sentAt"&&k!=="detectedAt"&&k!=="stage"&&k!=="trigger"&&k!=="reason")copy[k]=p[k];window.localStorage.setItem(key,JSON.stringify(copy));return p;}
+    saved=JSON.parse(window.localStorage.getItem(key)||"null");
+   }catch(e){}
+   return saved&&typeof saved==="object"&&saved.stream?saved:p;
+  }
+  function bounded(value,low,high,fallback){value=Number(value);return isFinite(value)&&value>0?Math.max(low,Math.min(high,value)):fallback;}
+  function style(p){
+-  var place=Object.prototype.hasOwnProperty.call(places,p.position)?places[p.position]:places["top-right"],compact=p.compact===true||p.compact==="true",border=!(p.border===false||p.border==="false");
+-  var m=p.margin===undefined||p.margin===null||p.margin===""?3:Number(p.margin),edge;
+-  if(!isFinite(m)||m<0||m>10||Math.floor(m)!==m)m=3;
+-  edge=function(v){return v==="m"?m+"vw":v;};
++  var compact=p.compact===true||p.compact==="true",border=!(p.border===false||p.border==="false");
++  place=Object.prototype.hasOwnProperty.call(places,p.position)?places[p.position]:places["top-right"];
++  margin=p.margin===undefined||p.margin===null||p.margin===""?3:Number(p.margin);
++  if(!isFinite(margin)||margin<0||margin>10||Math.floor(margin)!==margin)margin=3;
+   showFps=!(p.fps===false||p.fps==="false");
+   var color=typeof p.borderColor==="string"&&/^#[0-9a-fA-F]{6}$/.test(p.borderColor)?p.borderColor:"#67dfad";
+-  panel.style.top=edge(place[0]);panel.style.right=edge(place[1]);panel.style.bottom=edge(place[2]);panel.style.left=edge(place[3]);panel.style.transform=place[4];
+-  panel.style.borderColor=color;panel.style.borderWidth=border?"3px":"0";panel.className=compact?"compact":"";
++  panel.style.borderColor=color;panel.style.borderWidth=border?"3px":"0";
++  baseClass=compact?"compact":"";
++  slideClass=place[3]==="m"?"from-left":"from-right";
+  }
+- function show(event){
+-  stop();
+-  zoom=1;originX=50;originY=50;applyZoom();
+-  var p=remember(params(event)),url=p.stream||"",duration=bounded(p.duration,15,90,45),mine=generation;
+-  style(p);panel.style.display="block";panel.style.width=bounded(p.width,25,55,42)+"%";
+-  label.textContent=typeof p.label==="string"?p.label.slice(0,60):"Camera";
+-  seconds.textContent=String(Math.ceil(duration));status.textContent="Connecting...";
+-  status.style.color="#a9bac4";message.textContent="Connecting live camera...";message.style.display="block";
++ function layout(){
++  var edge=function(v){return v==="m"?margin+"vw":v;},full=stage==="full";
++  panel.className=baseClass+" "+slideClass+" stage-"+stage;
++  panel.style.top=full?"0":edge(place[0]);panel.style.right=full?"0":edge(place[1]);
++  panel.style.bottom=full?"auto":edge(place[2]);panel.style.left=full?"0":edge(place[3]);
++  panel.style.transform=!full&&place[4]!=="none"?place[4]:"";
++  panel.style.width=full?"100%":stage==="chip"?"17%":bounded(current.width,25,55,42)+"%";
++ }
++ function setBadge(reason){
++  var crying=reason==="crying";
++  badge.textContent=crying?"Crying":"Motion";
++  panel.setAttribute("data-reason",crying?"crying":"motion");
++ }
++ function grabThumb(){
++  try{thumb.width=canvas.width;thumb.height=canvas.height;thumb.getContext("2d").drawImage(canvas,0,0);thumb.style.visibility="visible";}catch(e){}
++ }
++ function startPlayer(thumbOnly){
++  var url=current.stream||"",p=current;
++  stopPlayer();
++  var mine=generation;
+   started=Date.now();lastFrame=0;frames=0;lastCount=0;
+-  closeTimer=setTimeout(dismiss,duration*1000);
++  status.textContent="Connecting...";status.style.color="#a9bac4";
++  message.textContent="Connecting live camera...";message.style.display=thumb.style.visibility==="visible"?"none":"block";
+   if(!/^wss?:\/\/(?:[a-z0-9.-]+|\[[a-f0-9:]+\])(?::\d+)?\/[a-zA-Z0-9/_-]+$/.test(url)){
+-   status.textContent="No stream";message.textContent="Live stream was not supplied";return;
++   status.textContent="No stream";message.textContent="Live stream was not supplied";message.style.display="block";return;
+   }
+   try{
+    player=new JSMpeg.Player(url,{canvas:canvas,audio:false,autoplay:true,pauseWhenHidden:false,disableWebAssembly:true,videoBufferSize:1024*1024,
+-    onVideoDecode:function(){if(mine!==generation)return;frames++;lastFrame=Date.now();canvas.style.visibility="visible";message.style.display="none";if(frames===1){var socket=player&&player.source&&player.source.socket;if(socket&&socket.readyState===1)socket.send(JSON.stringify({type:"started",appStartupMs:lastFrame-started,sentAt:Number(p.sentAt)||0,detectedAt:Number(p.detectedAt)||0}));}}});
+-  }catch(e){status.textContent="Player error";message.textContent="Live video could not start";return;}
++    onVideoDecode:function(){
++     if(mine!==generation)return;
++     frames++;lastFrame=Date.now();
++     if(thumbOnly){
++      if(frames>=3){grabThumb();message.style.display="none";setTimeout(function(){if(mine===generation)stopPlayer();},0);}
++      return;
++     }
++     canvas.style.visibility="visible";message.style.display="none";
++     if(frames===1){var socket=player&&player.source&&player.source.socket;if(socket&&socket.readyState===1)socket.send(JSON.stringify({type:"started",appStartupMs:lastFrame-started,sentAt:Number(p.sentAt)||0,detectedAt:Number(p.detectedAt)||0}));}
++    }});
++  }catch(e){status.textContent="Player error";message.textContent="Live video could not start";message.style.display="block";return;}
++  if(thumbOnly)return;
+   tickTimer=setInterval(function(){
+    var now=Date.now(),fps=frames-lastCount;lastCount=frames;
+-   seconds.textContent=String(Math.max(0,Math.ceil(duration-(now-started)/1000)));
++   seconds.textContent=String(Math.max(0,Math.ceil((deadline-now)/1000)));
+    if(lastFrame&&now-lastFrame<3000){status.textContent=(showFps?"LIVE · "+fps+" fps":"LIVE")+(zoom>1?" · "+zoom.toFixed(1)+"x":"");status.style.color="#67dfad";}
+    else if(now-started>8000){status.textContent="Stream stalled";status.style.color="#ffd38a";canvas.style.visibility="hidden";message.textContent="Waiting for live camera";message.style.display="block";}
+    var socket=player&&player.source&&player.source.socket;
+    if(socket&&socket.readyState===1){socket.send(JSON.stringify({type:"metrics",frames:frames,fps:fps,width:canvas.width,height:canvas.height,age:lastFrame?now-lastFrame:-1}));}
+   },1000);
+  }
++ function enter(next){
++  stage=next;layout();
++  if(next==="chip"){setTimer(bounded(current.chipSeconds,5,60,15));startPlayer(true);}
++  else if(next==="panel"){setTimer(bounded(current.duration,15,90,45));startPlayer(false);}
++  else{setTimer(bounded(current.fullMinutes,1,10,5)*60);}
++ }
++ function advance(){
++  if(stage==="chip")enter("panel");
++  else if(stage==="panel")enter("full");
++ }
++ function open(p){
++  if(hideTimer!==null){clearTimeout(hideTimer);hideTimer=null;}
++  stop();
++  zoom=1;originX=50;originY=50;applyZoom();
++  current=p;
++  style(p);
++  label.textContent=typeof p.label==="string"?p.label.slice(0,60):"Camera";
++  thumb.style.visibility="hidden";
++  setBadge(p.reason);
++  panel.style.display="block";
++  stage=p.stage==="chip"?"chip":"panel";
++  layout();
++  panel.className=panel.className+" hiding";
++  void panel.offsetWidth;
++  enter(stage);
++ }
++ function show(event){
++  var raw=params(event),p=remember(raw);
++  if(stage===null){open(p);return;}
++  /* Already open: an alert only keeps a chip alive, and never interrupts the regular or full view. */
++  if(raw.trigger===true||raw.trigger==="true"){
++   if(stage==="chip"){setTimer(bounded(current.chipSeconds,5,60,15));if(raw.reason==="crying")setBadge("crying");}
++   return;
++  }
++  advance();
++ }
+  document.addEventListener("webOSRelaunch",show);
+- document.addEventListener("keydown",function(e){var k=e.keyCode;if(k===461||k===27){e.preventDefault();dismiss();return;}if(panel.style.display==="none")return;if(k===403){e.preventDefault();setZoom(zoom*1.25);}else if(k===404){e.preventDefault();setZoom(zoom/1.25);}else if(zoom>1&&k>=37&&k<=40){e.preventDefault();pan(k===37?-8:k===39?8:0,k===38?-8:k===40?8:0);}});
++ document.addEventListener("keydown",function(e){var k=e.keyCode;if(k===461||k===27){e.preventDefault();dismiss();return;}if(stage===null)return;if(k===13){e.preventDefault();advance();return;}if(stage==="chip")return;if(k===403){e.preventDefault();setZoom(zoom*1.25);}else if(k===404){e.preventDefault();setZoom(zoom/1.25);}else if(zoom>1&&k>=37&&k<=40){e.preventDefault();pan(k===37?-8:k===39?8:0,k===38?-8:k===40?8:0);}});
+  window.addEventListener("wheel",wheel,{passive:false});
++ panel.addEventListener("click",function(e){if(e.preventDefault)e.preventDefault();advance();});
+  window.addEventListener("pagehide",stop);
+  window.addEventListener("unload",stop);
+  show();
+diff --git a/source/index.html b/source/index.html
+index 1b21132..5ec0d62 100644
+--- a/source/index.html
++++ b/source/index.html
+@@ -2,6 +2,6 @@
+ <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+ <title>Live Camera Overlay</title><link rel="stylesheet" href="style.css"></head>
+ <body><aside id="panel"><header><span id="label">Camera</span><span id="status">Connecting...</span></header>
+-<div id="viewport"><canvas id="camera"></canvas><div id="message">Connecting live camera...</div></div>
++<div id="viewport"><canvas id="thumb"></canvas><canvas id="camera"></canvas><div id="badge">Motion</div><div id="message">Connecting live camera...</div></div>
+ <footer>Live camera <span>Closes in <b id="seconds">45</b>s · BACK to dismiss</span></footer></aside>
+ <script src="vendor/jsmpeg.min.js"></script><script src="app.js"></script></body></html>
+diff --git a/source/style.css b/source/style.css
+index 6ba3243..ac6a195 100644
+--- a/source/style.css
++++ b/source/style.css
+@@ -8,3 +8,20 @@ header{height:48px;padding:0 16px;line-height:48px;font-size:24px;font-weight:bo
+ footer{padding:10px 16px;font-size:17px;color:#b8c7d0}footer span{float:right}
+ #panel.compact header,#panel.compact footer{position:absolute;left:0;right:0;z-index:1;background:rgba(8,12,16,.55);text-shadow:0 1px 3px #000}
+ #panel.compact header{top:0}#panel.compact footer{bottom:0}
++#panel{display:none;will-change:transform,opacity,width;transition:width .3s cubic-bezier(.2,.9,.3,1.08),top .3s ease,right .3s ease,left .3s ease,border-radius .3s ease,opacity .24s ease,transform .24s cubic-bezier(.2,.9,.3,1.08);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.55)}
++#panel.hiding{opacity:0}
++#panel.hiding.from-right{transform:translateX(48px) scale(.96)}
++#panel.hiding.from-left{transform:translateX(-48px) scale(.96)}
++#thumb{position:absolute;left:0;top:0;width:100%;height:100%;visibility:hidden}
++#camera{transition:opacity .25s ease}
++#badge{display:none;position:absolute;left:0;right:0;bottom:0;padding:6px 10px 6px 26px;font-size:17px;font-weight:bold;background:linear-gradient(transparent,rgba(0,0,0,.75));text-shadow:0 1px 3px #000}
++#badge:before{content:"";position:absolute;left:10px;top:50%;margin-top:-5px;width:10px;height:10px;border-radius:50%;background:#67dfad;animation:pulse 1.4s ease-in-out infinite}
++#panel[data-reason="crying"] #badge:before{background:#ff8f8f}
++@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}
++#panel.stage-chip header,#panel.stage-chip footer{display:none}
++#panel.stage-chip #badge{display:block}
++#panel.stage-chip #message{font-size:15px;top:40%}
++#panel[data-reason="crying"].stage-chip{border-color:#ff8f8f!important}
++#panel.stage-full{border-radius:0;border-width:0!important}
++#panel.stage-full header{position:absolute;left:0;right:0;top:0;z-index:1;background:rgba(8,12,16,.55);text-shadow:0 1px 3px #000}
++#panel.stage-full footer{display:none}

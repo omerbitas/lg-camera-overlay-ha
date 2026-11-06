@@ -4,10 +4,10 @@
 FROM node:22-bookworm-slim AS build
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
-COPY remember-stream.patch zoom.patch faster-start.patch /tmp/
+COPY remember-stream.patch zoom.patch faster-start.patch stages.patch /tmp/
 RUN git clone --depth 1 --branch v1.2.1 https://github.com/mbsintegrations/LG-Camera-Overlay.git . \
  && test "$(git rev-parse HEAD)" = "3c27605a93123e87244a277b49c464a763274f34" \
- && git apply /tmp/remember-stream.patch /tmp/zoom.patch /tmp/faster-start.patch
+ && git apply /tmp/remember-stream.patch /tmp/zoom.patch /tmp/faster-start.patch /tmp/stages.patch
 RUN npm ci --prefix tooling --ignore-scripts --no-audit --no-fund \
  && node scripts/build.cjs \
  && node scripts/verify-package.cjs \
