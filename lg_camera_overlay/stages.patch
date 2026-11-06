@@ -12,7 +12,7 @@ index 421ba60..07f0559 100644
   child.stdout.on("data",data=>{
    if(group.encoder!==child)return;
 diff --git a/source/app.js b/source/app.js
-index ced5f60..7232fe1 100644
+index ced5f60..1f8e6ff 100644
 --- a/source/app.js
 +++ b/source/app.js
 @@ -2,27 +2,43 @@
@@ -65,7 +65,7 @@ index ced5f60..7232fe1 100644
   function params(event){
    var p=event&&event.detail;
    if(p&&p.launchParams)p=p.launchParams;
-@@ -34,51 +50,124 @@
+@@ -34,51 +50,125 @@
   function remember(p){
    var key="overlayLastLaunch",saved=null,copy={},k;
    try{
@@ -91,6 +91,7 @@ index ced5f60..7232fe1 100644
 -  panel.style.borderColor=color;panel.style.borderWidth=border?"3px":"0";panel.className=compact?"compact":"";
 +  panel.style.borderColor=color;panel.style.borderWidth=border?"3px":"0";
 +  baseClass=compact?"compact":"";
++  panel.style.setProperty("--card-opacity",String(bounded(p.opacity,30,100,100)/100));
 +  slideClass=place[3]==="m"?"from-left":"from-right";
   }
 - function show(event){
@@ -224,14 +225,15 @@ index 1b21132..5ec0d62 100644
  <footer>Live camera <span>Closes in <b id="seconds">45</b>s · BACK to dismiss</span></footer></aside>
  <script src="vendor/jsmpeg.min.js"></script><script src="app.js"></script></body></html>
 diff --git a/source/style.css b/source/style.css
-index 6ba3243..94be557 100644
+index 6ba3243..a729049 100644
 --- a/source/style.css
 +++ b/source/style.css
-@@ -8,3 +8,20 @@ header{height:48px;padding:0 16px;line-height:48px;font-size:24px;font-weight:bo
+@@ -8,3 +8,21 @@ header{height:48px;padding:0 16px;line-height:48px;font-size:24px;font-weight:bo
  footer{padding:10px 16px;font-size:17px;color:#b8c7d0}footer span{float:right}
  #panel.compact header,#panel.compact footer{position:absolute;left:0;right:0;z-index:1;background:rgba(8,12,16,.55);text-shadow:0 1px 3px #000}
  #panel.compact header{top:0}#panel.compact footer{bottom:0}
 +#panel{display:none;will-change:transform,opacity,width;transition:width .42s cubic-bezier(.2,.9,.3,1.06),top .42s ease,right .42s ease,left .42s ease,border-radius .42s ease,opacity .38s ease,transform .46s cubic-bezier(.2,.9,.3,1.12);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.55)}
++#panel{opacity:var(--card-opacity,1)}
 +#panel.hiding{opacity:0}
 +#panel.hiding.from-right{transform:translateX(90px) scale(.9)}
 +#panel.hiding.from-left{transform:translateX(-90px) scale(.9)}
