@@ -225,10 +225,10 @@ index 1b21132..5ec0d62 100644
  <footer>Live camera <span>Closes in <b id="seconds">45</b>s · BACK to dismiss</span></footer></aside>
  <script src="vendor/jsmpeg.min.js"></script><script src="app.js"></script></body></html>
 diff --git a/source/style.css b/source/style.css
-index 6ba3243..a729049 100644
+index 6ba3243..9423bc0 100644
 --- a/source/style.css
 +++ b/source/style.css
-@@ -8,3 +8,21 @@ header{height:48px;padding:0 16px;line-height:48px;font-size:24px;font-weight:bo
+@@ -8,3 +8,22 @@ header{height:48px;padding:0 16px;line-height:48px;font-size:24px;font-weight:bo
  footer{padding:10px 16px;font-size:17px;color:#b8c7d0}footer span{float:right}
  #panel.compact header,#panel.compact footer{position:absolute;left:0;right:0;z-index:1;background:rgba(8,12,16,.55);text-shadow:0 1px 3px #000}
  #panel.compact header{top:0}#panel.compact footer{bottom:0}
@@ -248,5 +248,6 @@ index 6ba3243..a729049 100644
 +#panel.stage-chip #message{font-size:15px;top:40%}
 +#panel[data-reason="crying"].stage-chip{border-color:#ff8f8f!important}
 +#panel.stage-full{border-radius:0;border-width:0!important}
++#panel.stage-full:not(.hiding){opacity:1}
 +#panel.stage-full header{position:absolute;left:0;right:0;top:0;z-index:1;background:rgba(8,12,16,.55);text-shadow:0 1px 3px #000}
 +#panel.stage-full footer{display:none}

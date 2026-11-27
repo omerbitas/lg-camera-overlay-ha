@@ -12,4 +12,4 @@ The upstream project marks its Home Assistant OS app as experimental and not tes
 
 `faster-start.patch` shortens FFmpeg's stream analysis in the relay, and retries with default settings if that fails.
 
-`stages.patch` adds a notification chip with a one-frame thumbnail, then regular and full-screen stages (click or OK to advance), with slide and fade animations. Alerts never interrupt an open regular or full-screen view. It also raises the relay's stream limit to 11 minutes for full screen.
+`stages.patch` adds a notification chip with a one-frame thumbnail, then regular and full-screen stages (click or OK to advance), with slide and fade animations. Alerts never interrupt an open regular or full-screen view. It also raises the relay's stream limit to 11 minutes for full screen. Chip and panel stages use the opacity launch setting; full screen is always fully opaque.
